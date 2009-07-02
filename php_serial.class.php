@@ -9,6 +9,9 @@ define ("SERIAL_DEVICE_OPENED", 2);
  * THIS PROGRAM COMES WITH ABSOLUTELY NO WARANTIES !
  * USE IT AT YOUR OWN RISKS !
  *
+ * Changes added by Rizwan Kassim <rizwank@uwink.com> for OSX functionality
+ * default serial device for osx devices is /dev/tty.serial for machines with a built in serial device
+ *
  * @author Rémy Sanchez <thenux@gmail.com>
  * @thanks Aurélien Derouineau for finding how to open serial ports with windows
  * @thanks Alec Avedisyan for help and testing with reading
@@ -54,6 +57,22 @@ class phpSerial
 				trigger_error("No stty availible, unable to run.", E_USER_ERROR);
 			}
 		}
+		elseif (substr($sysname, 0, 6) === "Darwin")
+		{
+			$this->_os = "osx";
+            // We know stty is available in Darwin. 
+            // stty returns 1 when run from php, because "stty: stdin isn't a
+            // terminal"
+            // skip this check
+//			if($this->_exec("stty") === 0)
+//			{
+				register_shutdown_function(array($this, "deviceClose"));
+//			}
+//			else
+//			{
+//				trigger_error("No stty availible, unable to run.", E_USER_ERROR);
+//			}
+		}
 		elseif(substr($sysname, 0, 7) === "Windows")
 		{
 			$this->_os = "windows";
@@ -61,7 +80,7 @@ class phpSerial
 		}
 		else
 		{
-			trigger_error("Host OS is neither linux nor windows, unable tu run.", E_USER_ERROR);
+			trigger_error("Host OS is neither osx, linux nor windows, unable tu run.", E_USER_ERROR);
 			exit();
 		}
 	}
@@ -73,6 +92,7 @@ class phpSerial
 	/**
 	 * Device set function : used to set the device name/address.
 	 * -> linux : use the device address, like /dev/ttyS0
+	 * -> osx : use the device address, like /dev/tty.serial
 	 * -> windows : use the COMxx device name, like COM1 (can also be used
 	 *     with linux)
 	 *
@@ -91,6 +111,15 @@ class phpSerial
 				}
 
 				if ($this->_exec("stty -F " . $device) === 0)
+				{
+					$this->_device = $device;
+					$this->_dState = SERIAL_DEVICE_SET;
+					return true;
+				}
+			}
+			elseif ($this->_os === "osx")
+			{
+				if ($this->_exec("stty -f " . $device) === 0)
 				{
 					$this->_device = $device;
 					$this->_dState = SERIAL_DEVICE_SET;
@@ -224,13 +253,17 @@ class phpSerial
 		{
 			if ($this->_os === "linux")
 			{
-				$ret = $this->_exec("stty -F " . $this->_device . " " . (int) $rate, $out);
-			}
-			elseif ($this->_os === "windows")
-			{
-				$ret = $this->_exec("mode " . $this->_windevice . " BAUD=" . $validBauds[$rate], $out);
-			}
-			else return false;
+                $ret = $this->_exec("stty -F " . $this->_device . " " . (int) $rate, $out);
+            }
+            if ($this->_os === "darwin")
+            {
+                $ret = $this->_exec("stty -f " . $this->_device . " " . (int) $rate, $out);
+            }
+            elseif ($this->_os === "windows")
+            {
+                $ret = $this->_exec("mode " . $this->_windevice . " BAUD=" . $validBauds[$rate], $out);
+            }
+            else return false;
 
 			if ($ret !== 0)
 			{
@@ -455,7 +488,7 @@ class phpSerial
 	{
 		$this->_buffer .= $str;
 
-		if ($this->autoflush === true) $this->flush();
+		if ($this->autoflush === true) $this->serialflush();
 
 		usleep((int) ($waitForReply * 1000000));
 	}
@@ -475,8 +508,10 @@ class phpSerial
 			return false;
 		}
 
-		if ($this->_os === "linux")
-		{
+		if ($this->_os === "linux" || $this->_os === "osx")
+			{
+			// Behavior in OSX isn't to wait for new data to recover, but just grabs what's there!
+			// Doesn't always work perfectly for me in OSX
 			$content = ""; $i = 0;
 
 			if ($count !== 0)
@@ -497,7 +532,7 @@ class phpSerial
 		}
 		elseif ($this->_os === "windows")
 		{
-			/* Do nohting : not implented yet */
+			/* Do nothing : not implented yet */
 		}
 
 		trigger_error("Reading serial port is not implemented for Windows", E_USER_WARNING);
@@ -506,10 +541,11 @@ class phpSerial
 
 	/**
 	 * Flushes the output buffer
+	 * Renamed from flush for osx compat. issues
 	 *
 	 * @return bool
 	 */
-	function flush ()
+	function serialflush ()
 	{
 		if (!$this->_ckOpened()) return false;
 
