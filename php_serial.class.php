@@ -128,7 +128,7 @@ class phpSerial
 			}
 			elseif ($this->_os === "windows")
 			{
-				if (preg_match("@^COM(\d+):?$@i", $device, $matches) and $this->_exec(exec("mode " . $device)) === 0)
+				if (preg_match("@^COM(\d+):?$@i", $device, $matches) and $this->_exec(exec("mode " . $device . " xon=on BAUD=9600")) === 0)
 				{
 					$this->_windevice = "COM" . $matches[1];
 					$this->_device = "\\.\com" . $matches[1];
@@ -532,10 +532,26 @@ class phpSerial
 		}
 		elseif ($this->_os === "windows")
 		{
-			/* Do nothing : not implented yet */
+			// Windows port reading procedures still buggy
+			$content = ""; $i = 0;
+
+			if ($count !== 0)
+			{
+				do {
+					if ($i > $count) $content .= fread($this->_dHandle, ($count - $i));
+					else $content .= fread($this->_dHandle, 128);
+				} while (($i += 128) === strlen($content));
+			}
+			else
+			{
+				do {
+					$content .= fread($this->_dHandle, 128);
+				} while (($i += 128) === strlen($content));
+			}
+
+			return $content;
 		}
 
-		trigger_error("Reading serial port is not implemented for Windows", E_USER_WARNING);
 		return false;
 	}
 
