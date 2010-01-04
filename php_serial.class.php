@@ -9,12 +9,13 @@ define ("SERIAL_DEVICE_OPENED", 2);
  * THIS PROGRAM COMES WITH ABSOLUTELY NO WARANTIES !
  * USE IT AT YOUR OWN RISKS !
  *
- * Changes added by Rizwan Kassim <rizwank@uwink.com> for OSX functionality
+ * Changes added by Rizwan Kassim <rizwank@geekymedia.com> for OSX functionality
  * default serial device for osx devices is /dev/tty.serial for machines with a built in serial device
  *
  * @author Rémy Sanchez <thenux@gmail.com>
  * @thanks Aurélien Derouineau for finding how to open serial ports with windows
  * @thanks Alec Avedisyan for help and testing with reading
+ * @thanks Jim Wright for OSX cleanup/fixes.
  * @copyright under GPL 2 licence
  */
 class phpSerial
@@ -80,7 +81,7 @@ class phpSerial
 		}
 		else
 		{
-			trigger_error("Host OS is neither osx, linux nor windows, unable tu run.", E_USER_ERROR);
+			trigger_error("Host OS is neither osx, linux nor windows, unable to run.", E_USER_ERROR);
 			exit();
 		}
 	}
@@ -255,7 +256,7 @@ class phpSerial
 			{
                 $ret = $this->_exec("stty -F " . $this->_device . " " . (int) $rate, $out);
             }
-            if ($this->_os === "darwin")
+            if ($this->_os === "osx")
             {
                 $ret = $this->_exec("stty -f " . $this->_device . " " . (int) $rate, $out);
             }
@@ -304,6 +305,10 @@ class phpSerial
 		{
 			$ret = $this->_exec("stty -F " . $this->_device . " " . $args[$parity], $out);
 		}
+		elseif ($this->_os === "osx")
+		{
+			$ret = $this->_exec("stty -f " . $this->_device . " " . $args[$parity], $out);
+		}
 		else
 		{
 			$ret = $this->_exec("mode " . $this->_windevice . " PARITY=" . $parity{0}, $out);
@@ -339,6 +344,10 @@ class phpSerial
 		if ($this->_os === "linux")
 		{
 			$ret = $this->_exec("stty -F " . $this->_device . " cs" . $int, $out);
+		}
+		elseif ($this->_os === "osx")
+		{
+			$ret = $this->_exec("stty -f " . $this->_device . " cs" . $int, $out);
 		}
 		else
 		{
@@ -378,6 +387,10 @@ class phpSerial
 		if ($this->_os === "linux")
 		{
 			$ret = $this->_exec("stty -F " . $this->_device . " " . (($length == 1) ? "-" : "") . "cstopb", $out);
+		}
+		elseif ($this->_os === "osx")
+		{
+			$ret = $this->_exec("stty -f " . $this->_device . " " . (($length == 1) ? "-" : "") . "cstopb", $out);
 		}
 		else
 		{
@@ -428,6 +441,8 @@ class phpSerial
 
 		if ($this->_os === "linux")
 			$ret = $this->_exec("stty -F " . $this->_device . " " . $linuxModes[$mode], $out);
+		elseif ($this->_os === "osx")
+			$ret = $this->_exec("stty -f " . $this->_device . " " . $linuxModes[$mode], $out);
 		else
 			$ret = $this->_exec("mode " . $this->_windevice . " " . $windowsModes[$mode], $out);
 
