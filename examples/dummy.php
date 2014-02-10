@@ -1,5 +1,5 @@
 <?php
-include "php_serial.class.php";
+include 'php_serial.class.php';
 
 // Let's start the class
 $serial = new phpSerial;
@@ -46,5 +46,4 @@ $serial->confBaudRate(2400);
 > http://lists.apple.com/archives/darwin-dev/2009/Nov/msg00099.html
 
 Riz comment : I've definately had a device that didn't work well when using cu., but worked fine with tty. Either way, a good thing to note and keep for reference when debugging.
- */ 
-?>
+ */

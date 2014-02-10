@@ -23,30 +23,30 @@ We then echo back the result received, and present the form again for additional
 
 */
 
-
 function microtime_float()
 {
-	list($usec, $sec) = explode(" ", microtime());
-	return ((float)$usec + (float)$sec);
+    list($usec, $sec) = explode(" ", microtime());
+
+    return ((float) $usec + (float) $sec);
 }
 
 $the_input  = $_POST['the_input'];
 
 if ($the_input == '') {
-	echo "<div id='newrequestbox'>";
-	echo "<form id='FormName' name='FormName' action='example_VS421CPNTA.php' method='post'>
-			<table width=500>
-				<tr>
-					<td>Switch to input? :</td>
-					<td><input type=text name=the_input  maxlength=30 size=30></td>
-					<td><input type=submit value='Switch'></td>
-				</tr>
-			</table>
-		</form>";
-	echo "</div>";
+    echo "<div id='newrequestbox'>";
+    echo "<form id='FormName' name='FormName' action='example_VS421CPNTA.php' method='post'>
+            <table width=500>
+                <tr>
+                    <td>Switch to input? :</td>
+                    <td><input type=text name=the_input  maxlength=30 size=30></td>
+                    <td><input type=submit value='Switch'></td>
+                </tr>
+            </table>
+        </form>";
+    echo "</div>";
 } else {
 
-include "php_serial.class.php";
+include 'php_serial.class.php';
 
 // Let's start the class
 $serial = new phpSerial;
@@ -75,11 +75,11 @@ $theResult = '';
 $start = microtime_float();
 
 while ( ($read == '') && (microtime_float() <= $start + 0.5) ) {
-	$read = $serial->readPort();
-	if ($read != '') {
-		$theResult .= $read;
-		$read = '';
-	}
+    $read = $serial->readPort();
+    if ($read != '') {
+        $theResult .= $read;
+        $read = '';
+    }
 }
 
 // If you want to change the configuration, the device must be closed
@@ -90,15 +90,13 @@ $serial->deviceClose();
 echo "Read data: ".$theResult."<br>";
 
 echo "<form id='FormName' name='FormName' action='example_VS421CPNTA.php' method='post'>
-		<table width=500>
+        <table width=500>
 
-			<tr>
-				<td>Switch to input? :</td>
-				<td><input type=text name=the_input  maxlength=30 size=30></td>
-				<td><input type=submit value='Switch'></td>
-			</tr>
-		</table>
-	</form>";
+            <tr>
+                <td>Switch to input? :</td>
+                <td><input type=text name=the_input  maxlength=30 size=30></td>
+                <td><input type=submit value='Switch'></td>
+            </tr>
+        </table>
+    </form>";
 }
-
-?>

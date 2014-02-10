@@ -1,12 +1,12 @@
 <?php
-include "php_serial.class.php";
+include 'php_serial.class.php';
 
 // Let's start the class
 $serial = new phpSerial;
 
 // First we must specify the device. This works on both linux and windows (if
 // your linux serial device is /dev/ttyS0 for COM1, etc)
-// If you are using Windows, make sure you disable FIFO from the modem's 
+// If you are using Windows, make sure you disable FIFO from the modem's
 // Device Manager properties pane (Advanced >> Advanced Port Settings...)
 
 $serial->deviceSet("COM4");
@@ -30,5 +30,3 @@ var_dump($serial->readPort());
 
 // If you want to change the configuration, the device must be closed
 $serial->deviceClose();
-
-?>
