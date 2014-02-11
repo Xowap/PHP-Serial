@@ -11,5 +11,10 @@
     "minimum-stability": "stable",
     "autoload": {
         "classmap": ["src/"]
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-develop": "1.0.x-dev"
+        }
     }
 }
