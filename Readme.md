@@ -11,6 +11,34 @@ created a convenience class to access the serial port though the Linux file.
 Afterwards, I posted it to [PHP Classes](http://www.phpclasses.org/package/3679-PHP-Communicate-with-a-serial-port.html),
 and this probably is what brought it any visibility.
 
+Example
+-------
+
+```php
+<?php
+include 'PhpSerial.php';
+
+// Let's start the class
+$serial = new PhpSerial;
+
+// First we must specify the device. This works on both linux and windows (if
+// your linux serial device is /dev/ttyS0 for COM1, etc)
+$serial->deviceSet("COM1");
+
+// We can change the baud rate, parity, length, stop bits, flow control
+$serial->confBaudRate(2400);
+$serial->confParity("none");
+$serial->confCharacterLength(8);
+$serial->confStopBits(1);
+$serial->confFlowControl("none");
+
+// Then we need to open it
+$serial->deviceOpen();
+
+// To write into
+$serial->sendMessage("Hello !");
+```
+
 State of the project
 --------------------
 
