@@ -74,10 +74,9 @@ class PhpSerial
 
     /**
      * Device set function : used to set the device name/address.
-     * -> linux : use the device port name, like ttyS0 or ttyACM0 
-     * -> osx : use the device address, like /dev/tty.serial
-     * -> windows : use the COMxx device name, like COM1 (can also be used
-     *     with linux)
+     * -> linux : use the device port name, like ttyS0 or ttyACM0 and simlars 
+     * -> osx : use the device address, like tty.serial and similars
+     * -> windows : use the COMxx device name, like COM1
      *
      * @param  string $device the name of the device to be used
      * @return bool
