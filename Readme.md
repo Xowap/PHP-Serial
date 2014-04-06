@@ -21,8 +21,8 @@ include 'PhpSerial.php';
 // Let's start the class
 $serial = new PhpSerial;
 
-// First we must specify the device. This works on both linux and windows (if
-// your linux serial device is /dev/ttyS0 for COM1, etc)
+// First we must specify the device. This works on both linux and windows 
+// In windows you have to spesify COM name, in linux it's ttyS0 or ttyACM0 similar name port name and in Mac it's tty.serial or similar serial name)
 $serial->deviceSet("COM1");
 
 // We can change the baud rate, parity, length, stop bits, flow control
