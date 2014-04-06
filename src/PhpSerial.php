@@ -85,10 +85,22 @@ class PhpSerial
     {
         if ($this->_dState !== SERIAL_DEVICE_OPENED) {
             if ($this->_os === "linux") {
-                if ($this->_exec("stty -F /dev/" . $device) === 0) { 
-					$this->_device = "/dev/".$device;
-					$this->_dState = SERIAL_DEVICE_SET;
-					return true;
+			
+				if (substr($device, 0, 3) == "COM") {
+					preg_match("@^COM(\\d+):?$@i", $device, $matches) 
+					$devName = "ttyS" . ($matches[1] - 1) === 0);
+					
+					if ($this->_exec("stty -F /dev/" . $devName ) { 
+						$this->_device = "/dev/".$devName;
+						$this->_dState = SERIAL_DEVICE_SET;
+						return true;
+					}
+                else {
+					if ($this->_exec("stty -F /dev/" . $device) === 0) { 
+						$this->_device = "/dev/".$device;
+						$this->_dState = SERIAL_DEVICE_SET;
+						return true;
+					}
 				}
             } elseif ($this->_os === "osx") {
                 if ($this->_exec("stty -f /dev/" . $device) === 0) {
