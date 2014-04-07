@@ -74,10 +74,9 @@ class PhpSerial
 
     /**
      * Device set function : used to set the device name/address.
-     * -> linux : use the device address, like /dev/ttyS0
-     * -> osx : use the device address, like /dev/tty.serial
-     * -> windows : use the COMxx device name, like COM1 (can also be used
-     *     with linux)
+     * -> linux : use the device port name, like ttyS0 or ttyACM0 and simlars 
+     * -> osx : use the device address, like tty.serial and similars
+     * -> windows : use the COMxx device name, like COM1
      *
      * @param  string $device the name of the device to be used
      * @return bool
@@ -86,18 +85,26 @@ class PhpSerial
     {
         if ($this->_dState !== SERIAL_DEVICE_OPENED) {
             if ($this->_os === "linux") {
-                if (preg_match("@^COM(\\d+):?$@i", $device, $matches)) {
-                    $device = "/dev/ttyS" . ($matches[1] - 1);
-                }
-
-                if ($this->_exec("stty -F " . $device) === 0) {
-                    $this->_device = $device;
-                    $this->_dState = SERIAL_DEVICE_SET;
-
-                    return true;
-                }
+			
+				if (substr($device, 0, 3) == "COM") {
+					preg_match("@^COM(\\d+):?$@i", $device, $matches) 
+					$devName = "ttyS" . ($matches[1] - 1);
+					
+					if ($this->_exec("stty -F /dev/" . $devName) === 0) { 
+						$this->_device = "/dev/".$devName;
+						$this->_dState = SERIAL_DEVICE_SET;
+						return true;
+					}
+				}	
+                else {
+					if ($this->_exec("stty -F /dev/" . $device) === 0) { 
+						$this->_device = "/dev/".$device;
+						$this->_dState = SERIAL_DEVICE_SET;
+						return true;
+					}
+				}
             } elseif ($this->_os === "osx") {
-                if ($this->_exec("stty -f " . $device) === 0) {
+                if ($this->_exec("stty -f /dev/" . $device) === 0) {
                     $this->_device = $device;
                     $this->_dState = SERIAL_DEVICE_SET;
 
