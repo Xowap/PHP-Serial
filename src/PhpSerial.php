@@ -90,7 +90,7 @@ class PhpSerial
 					preg_match("@^COM(\\d+):?$@i", $device, $matches) 
 					$devName = "ttyS" . ($matches[1] - 1);
 					
-					if ($this->_exec("stty -F /dev/" . $devName === 0) { 
+					if ($this->_exec("stty -F /dev/" . $devName) === 0) { 
 						$this->_device = "/dev/".$devName;
 						$this->_dState = SERIAL_DEVICE_SET;
 						return true;
