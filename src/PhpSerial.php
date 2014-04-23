@@ -15,6 +15,9 @@ define ("SERIAL_DEVICE_OPENED", 2);
  * @thanks Alec Avedisyan for help and testing with reading
  * @thanks Jim Wright for OSX cleanup/fixes.
  * @copyright under GPL 2 licence
+ *
+ *
+ *
  */
 class PhpSerial
 {
@@ -67,18 +70,23 @@ class PhpSerial
             exit();
         }
     }
-
+	
     //
     // OPEN/CLOSE DEVICE SECTION -- {START}
     //
 
     /**
-     * Device set function : used to set the device name/address.
+     * Device set function : used to set the device name/address/number.
+	 *
+	 * You can set the number(9, 11, etc..) of the serial port and it'll figure out the name/address for you
+	 * in the format that the current OS accepts (so your app doesn't have to worry about it).
+	 *
+	 * Alternatively, provide the device name in one of these formats
      * -> linux : use the device address, like /dev/ttyS0
      * -> osx : use the device address, like /dev/tty.serial
-     * -> windows : use the COMxx device name, like COM1 (can also be used
-     *     with linux)
-     *
+     * -> windows : use the COMn device name, like COM1 (can also be used with linux)
+	 * @see $_os - tell current OS
+	 *
      * @param  string $device the name of the device to be used
      * @return bool
      */
@@ -86,7 +94,9 @@ class PhpSerial
     {
         if ($this->_dState !== SERIAL_DEVICE_OPENED) {
             if ($this->_os === "linux") {
-                if (preg_match("@^COM(\\d+):?$@i", $device, $matches)) {
+				if (is_integer($device)) {
+					$device = "/dev/ttyS$device";
+				} else if (preg_match("@^COM(\\d+):?$@i", $device, $matches)) {
                     $device = "/dev/ttyS" . ($matches[1] - 1);
                 }
 
@@ -97,23 +107,30 @@ class PhpSerial
                     return true;
                 }
             } elseif ($this->_os === "osx") {
-                if ($this->_exec("stty -f " . $device) === 0) {
+				if ($this->_exec("stty -f " . $device) === 0) {
                     $this->_device = $device;
                     $this->_dState = SERIAL_DEVICE_SET;
 
                     return true;
                 }
             } elseif ($this->_os === "windows") {
-                if (preg_match("@^COM(\\d+):?$@i", $device, $matches)
-                        and $this->_exec(
-                            exec("mode " . $device . " xon=on BAUD=9600")
-                        ) === 0
-                ) {
-                    $this->_winDevice = "COM" . $matches[1];
-                    $this->_device = "\\.com" . $matches[1];
-                    $this->_dState = SERIAL_DEVICE_SET;
+				if (is_integer($device)) {
+					$device = "COM$device";
+				}
+                if (preg_match("@^COM(\\d+):?$@i", $device, $matches)) {
+					// check if port is readable
+					if ($this->_exec(exec("mode " . $device . " xon=on BAUD=9600"))===0) {
+						$this->_winDevice = "COM" . $matches[1];
+						// Using the COMn: notation only works for COM1: through COM9: (not COM10:, COM11: etc...)
+						// Instead, use the \\.\COMn notation which works for any number
+						// (I think its a realpath parser bug, this avoids hiting it)
+						$this->_device = "\\\\.\\COM" . $matches[1];
+						$this->_dState = SERIAL_DEVICE_SET;
 
-                    return true;
+						return true;
+					} else {
+						trigger_error("Serial port is busy", E_USER_WARNING);
+					}
                 }
             }
 
@@ -136,6 +153,15 @@ class PhpSerial
      */
     public function deviceOpen($mode = "r+b")
     {
+		// need to add `b` for Windows to open in binary mode (so Windows won't change any byte values, same behavior as Linux)
+		// make sure `b` is added if user didn't (user shouldn't have to worry about it)
+		if ($mode=="r") {
+			$mode = "rb";
+		} elseif ($mode=="r+") {
+			$mode = "r+b";
+		} elseif ($mode=="w") {
+			$mode = "wb";
+		}
         if ($this->_dState === SERIAL_DEVICE_OPENED) {
             trigger_error("The device is already opened", E_USER_NOTICE);
 
@@ -160,10 +186,21 @@ class PhpSerial
             return false;
         }
 
-        $this->_dHandle = @fopen($this->_device, $mode);
+        $this->_dHandle = fopen($this->_device, $mode);
 
         if ($this->_dHandle !== false) {
             stream_set_blocking($this->_dHandle, 0);
+			
+			if ($this->_os === "windows") {
+				// need this on Windows (unknown for Linux, OSX)
+				// 
+				// without this, have to wait for 8K to fill the buffer before any fread() call returns
+				// 
+				// Serial-over-USB (few have a genuine serial port anymore) such as the FTDI driver (used in Arduinos, and a bunch of other boards)
+				// uses 64 byte packets to transport over USB ... therefore reading chunk sizes that aren't divisble by 64 may result in delay
+				stream_set_chunk_size($this->_dHandle, 64);
+			}
+			
             $this->_dState = SERIAL_DEVICE_OPENED;
 
             return true;
@@ -562,6 +599,24 @@ class PhpSerial
 
         usleep((int) ($waitForReply * 1000000));
     }
+	
+	/**
+	 * Reads a line from the serial port
+	 *
+	 * @param int $max_length optional maximum number of bytes to read ... will read up to this size, or until end of line or until end of stream
+	 * @param String $delim optional deliminator/end of line char(s) 
+	 *
+	 * @return 
+	 */
+	public function readPortLine($max_length=10000, $delim="\n") {
+		if ($this->_dState !== SERIAL_DEVICE_OPENED) {
+            trigger_error("Device must be opened to read it", E_USER_WARNING);
+
+            return false;
+        }
+		
+		return stream_get_line($this->_dHandle, $max_length, $delim);
+	}
 
     /**
      * Reads the port until no new datas are availible, then return the content.
@@ -602,7 +657,7 @@ class PhpSerial
         } elseif ($this->_os === "windows") {
             // Windows port reading procedures still buggy
             $content = ""; $i = 0;
-
+			
             if ($count !== 0) {
                 do {
                     if ($i > $count) {
