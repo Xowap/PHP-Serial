@@ -17,21 +17,6 @@ define ("SERIAL_DEVICE_OPENED", 2);
  * @copyright under GPL 2 licence
  *
  *
- * Windows Note: PHP on Windows can't handle COM ports beyond COM9 (fe COM10 or COM11 will
- *               fail ; on Windows, serial ports are named COM1, COM2, etc... and called `COM ports`)
- *
- *               To work around this (for Serial-over-USB devices), you can rename COM10 to a lower (currently
- *               unused) number like COM5. Then this will work on Windows.
- *
- *               To do that: 1. open Device Manager (on Win7, right-click My Computer > System Settings > Device Manager)
- *                           2. find `LPT and COM ports` in Device Manager
- *                           3. right-click the Device to rename and click properties
- *                           4. click `Port Settings` tab
- *                           5. click `Advanced` button
- *                           6. click `COM Port Number` and choose different COM port
- *                           7. click `Ok` and wait a moment
- *                           8. disconnect the device and reconnect it - this will retrigger the enumeration process so
- *                              it'll be reassigned the new COM port and you'll be able to read/write to it.
  *
  */
 class PhpSerial
@@ -85,7 +70,7 @@ class PhpSerial
             exit();
         }
     }
-
+	
     //
     // OPEN/CLOSE DEVICE SECTION -- {START}
     //
@@ -93,7 +78,7 @@ class PhpSerial
     /**
      * Device set function : used to set the device name/address/number.
 	 *
-	 * You can set the number of the serial port and it'll figure out the name/address for you
+	 * You can set the number(9, 11, etc..) of the serial port and it'll figure out the name/address for you
 	 * in the format that the current OS accepts (so your app doesn't have to worry about it).
 	 *
 	 * Alternatively, provide the device name in one of these formats
@@ -107,13 +92,11 @@ class PhpSerial
      */
     public function deviceSet($device)
     {
-		if (is_integer($device)) {
-			// supports this format already for linux & osx
-			$device = "COM$device";
-		}
         if ($this->_dState !== SERIAL_DEVICE_OPENED) {
             if ($this->_os === "linux") {
-                if (preg_match("@^COM(\\d+):?$@i", $device, $matches)) {
+				if (is_integer($device)) {
+					$device = "/dev/ttyS$device";
+				} else if (preg_match("@^COM(\\d+):?$@i", $device, $matches)) {
                     $device = "/dev/ttyS" . ($matches[1] - 1);
                 }
 
@@ -124,18 +107,24 @@ class PhpSerial
                     return true;
                 }
             } elseif ($this->_os === "osx") {
-                if ($this->_exec("stty -f " . $device) === 0) {
+				if ($this->_exec("stty -f " . $device) === 0) {
                     $this->_device = $device;
                     $this->_dState = SERIAL_DEVICE_SET;
 
                     return true;
                 }
             } elseif ($this->_os === "windows") {
+				if (is_integer($device)) {
+					$device = "COM$device";
+				}
                 if (preg_match("@^COM(\\d+):?$@i", $device, $matches)) {
 					// check if port is readable
 					if ($this->_exec(exec("mode " . $device . " xon=on BAUD=9600"))===0) {
 						$this->_winDevice = "COM" . $matches[1];
-						$this->_device = "COM" . $matches[1] . ":";
+						// Using the COMn: notation only works for COM1: through COM9: (not COM10:, COM11: etc...)
+						// Instead, use the \\.\COMn notation which works for any number
+						// (I think its a realpath parser bug, this avoids hiting it)
+						$this->_device = "\\\\.\\COM" . $matches[1];
 						$this->_dState = SERIAL_DEVICE_SET;
 
 						return true;
@@ -164,6 +153,15 @@ class PhpSerial
      */
     public function deviceOpen($mode = "r+b")
     {
+		// need to add `b` for Windows to open in binary mode (so Windows won't change any byte values, same behavior as Linux)
+		// make sure `b` is added if user didn't (user shouldn't have to worry about it)
+		if ($mode=="r") {
+			$mode = "rb";
+		} elseif ($mode=="r+") {
+			$mode = "r+b";
+		} elseif ($mode=="w") {
+			$mode = "wb";
+		}
         if ($this->_dState === SERIAL_DEVICE_OPENED) {
             trigger_error("The device is already opened", E_USER_NOTICE);
 

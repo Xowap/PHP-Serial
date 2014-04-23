@@ -56,12 +56,40 @@ There is **lots** of bugs. I know there is. I just don't know which are they.
 
 ### Platform support
 
-* **Linux**: the initially supported platform, the one I used. Probably the less
-  buggy one.
-* **MacOS**: although I never tried it on MacOS, it is similar to Linux and some
-  patches were submitted to me, so I guess it is OK
-* **Windows**: it seems to be working for some people, not working for some
-  others. Theoretically there should be a way to get it done.
+Open, read, and write, etc... works on Windows, Linux and Mac OS X.
+
+Using PhpSerial, you can program cross-platform PHP code for Serial Ports without worrying about which OS its run on.
+
+<?php
+
+require_once 'PhpSerial.php';
+
+$serial = new PhpSerial;
+
+// can provide a serial port number here, and it'll figure out the correct name for the serial port on the current operating system
+$serial->deviceSet(11);
+
+// you can configure the port
+$serial->confBaudRate(115200);
+$serial->confParity("none");
+$serial->confCharacterLength(8);
+$serial->confStopBits(1);
+$serial->confFlowControl("none");
+
+// takes care of the correct mode string too
+$serial->deviceOpen();
+
+// can use output buffering for messages to write to serial
+ob_start();
+?>
+<html/>
+<?php
+
+$serial->sendMessage(ob_get_clean());
+// make sure message is written immediately
+$serial->serialflush();
+
+?>
 
 ### Concerns
 
