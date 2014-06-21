@@ -25,6 +25,18 @@ class PhpSerial {
     public $_dState = SERIAL_DEVICE_NOTSET;
     public $_buffer = "";
     public $_os = "";
+    public $_winModes = array("parity" => "n",
+        "baud" => "57600",
+        "data" => "8",
+        "stop" => "1",
+        "octs" => "off",
+        "rts" => "off",
+        "xon" => "off",
+        "dtr" => "on");
+
+    public function __destruct() {
+        $this->deviceClose();
+    }
 
     /**
      * This var says if buffer should be flushed by sendMessage (true) or
@@ -77,9 +89,9 @@ class PhpSerial {
      * -> linux : use the device address, like /dev/ttyS0
      * -> osx : use the device address, like /dev/tty.serial
      * -> windows : use the COMxx device name, like COM1 (can also be used
-     *     with linux)
+     * with linux)
      *
-     * @param  string $device the name of the device to be used
+     * @param string $device the name of the device to be used
      * @return bool
      */
     public function deviceSet($device) {
@@ -109,7 +121,7 @@ class PhpSerial {
                         ) === 0
                 ) {
                     $this->_winDevice = "COM" . $matches[1];
-                    $this->_device = "\\.com" . $matches[1];
+                    $this->_device = "\\.\com" . $matches[1];
                     $this->_dState = SERIAL_DEVICE_SET;
 
                     return true;
@@ -130,7 +142,7 @@ class PhpSerial {
     /**
      * Opens the device for reading and/or writing.
      *
-     * @param  string $mode Opening mode : same parameter as fopen()
+     * @param string $mode Opening mode : same parameter as fopen()
      * @return bool
      */
     public function deviceOpen($mode = "r+b") {
@@ -207,7 +219,7 @@ class PhpSerial {
      * Possible rates : 110, 150, 300, 600, 1200, 2400, 4800, 9600, 38400,
      * 57600 and 115200.
      *
-     * @param  int  $rate the rate to set the port in
+     * @param int $rate the rate to set the port in
      * @return bool
      */
     public function confBaudRate($rate) {
@@ -243,9 +255,10 @@ class PhpSerial {
                         "stty -f " . $this->_device . " " . (int) $rate, $out
                 );
             } elseif ($this->_os === "windows") {
-                $ret = $this->_exec(
-                        "mode " . $this->_winDevice . " BAUD=" . $validBauds[$rate], $out
-                );
+                $this->_winModes["baud"] = $validBauds[$rate]; //change baud
+                $mode_string = $this->get_win_mode_string();
+
+                $ret = $this->_exec("mode " . $this->_winDevice . $mode_string, $out);
             } else {
                 return false;
             }
@@ -268,7 +281,7 @@ class PhpSerial {
      * Configure parity.
      * Modes : odd, even, none
      *
-     * @param  string $parity one of the modes
+     * @param string $parity one of the modes
      * @return bool
      */
     public function confParity($parity) {
@@ -284,7 +297,8 @@ class PhpSerial {
             "none" => "-parenb",
             "odd" => "parenb parodd",
             "even" => "parenb -parodd",
-        );
+            "mark" => "",
+            "space" => "");
 
         if (!isset($args[$parity])) {
             trigger_error("Parity mode not supported", E_USER_WARNING);
@@ -301,9 +315,9 @@ class PhpSerial {
                     "stty -f " . $this->_device . " " . $args[$parity], $out
             );
         } else {
-            $ret = $this->_exec(
-                    "mode " . $this->_winDevice . " PARITY=" . $parity{0}, $out
-            );
+            $this->_winModes["PARITY"] = $parity{0};
+            $mode_string = $this->get_win_mode_string();
+            $ret = $this->_exec("mode " . $this->_winDevice . $mode_string, $out);
         }
 
         if ($ret === 0) {
@@ -318,7 +332,7 @@ class PhpSerial {
     /**
      * Sets the length of a character.
      *
-     * @param  int  $int length of a character (5 <= length <= 8)
+     * @param int $int length of a character (5 <= length <= 8)
      * @return bool
      */
     public function confCharacterLength($int) {
@@ -345,9 +359,9 @@ class PhpSerial {
                     "stty -f " . $this->_device . " cs" . $int, $out
             );
         } else {
-            $ret = $this->_exec(
-                    "mode " . $this->_winDevice . " DATA=" . $int, $out
-            );
+            $this->_winModes["DATA"] = $int;
+            $mode_string = $this->get_win_mode_string();
+            $ret = $this->_exec("mode " . $this->_winDevice . $mode_string, $out);
         }
 
         if ($ret === 0) {
@@ -364,9 +378,9 @@ class PhpSerial {
     /**
      * Sets the length of stop bits.
      *
-     * @param  float $length the length of a stop bit. It must be either 1,
-     *                       1.5 or 2. 1.5 is not supported under linux and on
-     *                       some computers.
+     * @param float $length the length of a stop bit. It must be either 1,
+     * 1.5 or 2. 1.5 is not supported under linux and on
+     * some computers.
      * @return bool
      */
     public function confStopBits($length) {
@@ -400,9 +414,9 @@ class PhpSerial {
                     (($length == 1) ? "-" : "") . "cstopb", $out
             );
         } else {
-            $ret = $this->_exec(
-                    "mode " . $this->_winDevice . " STOP=" . $length, $out
-            );
+            $this->_winModes["STOP"] = $length;
+            $mode_string = $this->get_win_mode_string();
+            $ret = $this->_exec("mode " . $this->_winDevice . $mode_string, $out);
         }
 
         if ($ret === 0) {
@@ -419,10 +433,10 @@ class PhpSerial {
     /**
      * Configures the flow control
      *
-     * @param  string $mode Set the flow control mode. Availible modes :
-     *                      -> "none" : no flow control
-     *                      -> "rts/cts" : use RTS/CTS handshaking
-     *                      -> "xon/xoff" : use XON/XOFF protocol
+     * @param string $mode Set the flow control mode. Availible modes :
+     * -> "none" : no flow control
+     * -> "rts/cts" : use RTS/CTS handshaking
+     * -> "xon/xoff" : use XON/XOFF protocol
      * @return bool
      */
     public function confFlowControl($mode) {
@@ -437,11 +451,6 @@ class PhpSerial {
             "none" => "clocal -crtscts -ixon -ixoff",
             "rts/cts" => "-clocal crtscts -ixon -ixoff",
             "xon/xoff" => "-clocal -crtscts ixon ixoff"
-        );
-        $windowsModes = array(
-            "none" => "xon=off octs=off rts=on",
-            "rts/cts" => "xon=off octs=on rts=hs",
-            "xon/xoff" => "xon=on octs=off rts=on",
         );
 
         if ($mode !== "none" and $mode !== "rts/cts" and $mode !== "xon/xoff") {
@@ -459,9 +468,26 @@ class PhpSerial {
                     "stty -f " . $this->_device . " " . $linuxModes[$mode], $out
             );
         } else {
-            $ret = $this->_exec(
-                    "mode " . $this->_winDevice . " " . $windowsModes[$mode], $out
-            );
+
+            switch ($mode) {
+                case "none":
+                    $this->_winModes["xon"] = "off"; //change baud
+                    $this->_winModes["octs"] = "off"; //change baud
+                    $this->_winModes["rts"] = "on"; //change baud
+                    break;
+                case "rts/cts":
+                    $this->_winModes["xon"] = "off"; //change baud
+                    $this->_winModes["octs"] = "on"; //change baud
+                    $this->_winModes["rts"] = "hs"; //change baud
+                    break;
+                case "xon/xoff":
+                    $this->_winModes["xon"] = "on"; //change baud
+                    $this->_winModes["octs"] = "off"; //change baud
+                    $this->_winModes["rts"] = "on"; //change baud
+                    break;
+            }
+            $mode_string = $this->get_win_mode_string();
+            $ret = $this->_exec("mode " . $this->_winDevice . $mode_string, $out);
         }
 
         if ($ret === 0) {
@@ -470,7 +496,45 @@ class PhpSerial {
             trigger_error(
                     "Unable to set flow control : " . $out[1], E_USER_ERROR
             );
+        }
+    }
 
+    /**
+     * Configures the transfer mode
+     *
+     * @param $mode Set the transfer mode. Availible modes :
+     * 	-> "ASCII" : special characters allowed
+     * 	-> "binary" : no special characters
+     * @return bool
+     */
+    public function confTransferMode($mode) {
+        if ($this->_dState !== SERIAL_DEVICE_SET) {
+            trigger_error("Unable to set transfer mode : the device is either not set or opened", E_USER_WARNING);
+            return false;
+        }
+
+
+        if ($mode !== "ASCII" and $mode !== "binary") {
+            trigger_error("Invalid transfer mode specified", E_USER_ERROR);
+            return false;
+        }
+
+        $linuxModes = array("ASCII" => "-ignbrk icrnl opost isig icanon iexten echo",
+            "binary" => "ignbrk -icrnl -opost -isig -icanon -iexten -echo");
+
+        if ($this->_os === "linux") {
+            $ret = $this->_exec("stty -F " . $this->_device . " " . $linuxModes[$mode], $out);
+        } elseif ($this->_os === "osx") {
+            $ret = $this->_exec("stty -f " . $this->_device . " " . $linuxModes[$mode], $out);
+        } else {
+            trigger_error("Unsupported OS for operation 'confTransferMode' : " . $this->_os, E_USER_ERROR);
+            return false;
+        }
+
+        if ($ret === 0)
+            return true;
+        else {
+            trigger_error("Unable to set transfer mode : " . $out[1], E_USER_ERROR);
             return false;
         }
     }
@@ -478,11 +542,11 @@ class PhpSerial {
     /**
      * Sets a setserial parameter (cf man setserial)
      * NO MORE USEFUL !
-     * 	-> No longer supported
-     * 	-> Only use it if you need it
+     * -> No longer supported
+     * -> Only use it if you need it
      *
-     * @param  string $param parameter name
-     * @param  string $arg   parameter value
+     * @param string $param parameter name
+     * @param string $arg parameter value
      * @return bool
      */
     public function setSetserialFlag($param, $arg = "") {
@@ -519,8 +583,8 @@ class PhpSerial {
     /**
      * Sends a string to the device
      *
-     * @param string $str          string to be sent to the device
-     * @param float  $waitForReply time to wait for the reply (in seconds)
+     * @param string $str string to be sent to the device
+     * @param float $waitForReply time to wait for the reply (in seconds)
      */
     public function sendMessage($str, $waitForReply = 0.1) {
         $this->_buffer .= $str;
@@ -536,7 +600,7 @@ class PhpSerial {
      * Reads the port until no new datas are availible, then return the content.
      *
      * @param int $count Number of characters to be read (will stop before
-     *                   if less characters are in the buffer)
+     * if less characters are in the buffer)
      * @return string
      */
     public function readPort($count = 0) {
@@ -623,6 +687,14 @@ class PhpSerial {
     //
     // INTERNAL TOOLKIT -- {START}
     //
+
+    public function get_win_mode_string() {
+        //piece together assoc array keys and values with '='
+        $mode_array = array_map(function($key, $value) {
+            return $key . "=" . $value . " ";
+        }, array_keys($this->_winModes), array_values($this->_winModes));
+        return implode($mode_array); //piece together string of all values
+    }
 
     public function _ckOpened() {
         if ($this->_dState !== SERIAL_DEVICE_OPENED) {
