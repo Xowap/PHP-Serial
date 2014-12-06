@@ -38,7 +38,7 @@ class PhpSerial
      *
      * @return PhpSerial
      */
-    public function PhpSerial()
+    public function __construct()
     {
         setlocale(LC_ALL, "en_US");
 
