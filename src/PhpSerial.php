@@ -110,7 +110,7 @@ class PhpSerial
                         ) === 0
                 ) {
                     $this->_winDevice = "COM" . $matches[1];
-                    $this->_device = "\\.com" . $matches[1];
+                    $this->_device = "\\.\com" . $matches[1];
                     $this->_dState = SERIAL_DEVICE_SET;
 
                     return true;
