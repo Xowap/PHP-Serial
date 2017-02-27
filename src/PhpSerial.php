@@ -51,7 +51,7 @@ class PhpSerial
                 register_shutdown_function(array($this, "deviceClose"));
             } else {
                 trigger_error(
-                    "No stty availible, unable to run.",
+                    "No stty available, unable to run.",
                     E_USER_ERROR
                 );
             }
@@ -444,7 +444,7 @@ class PhpSerial
     /**
      * Configures the flow control
      *
-     * @param  string $mode Set the flow control mode. Availible modes :
+     * @param  string $mode Set the flow control mode. Available modes :
      *                      -> "none" : no flow control
      *                      -> "rts/cts" : use RTS/CTS handshaking
      *                      -> "xon/xoff" : use XON/XOFF protocol
@@ -564,7 +564,7 @@ class PhpSerial
     }
 
     /**
-     * Reads the port until no new datas are availible, then return the content.
+     * Reads the port until no new datas are available, then return the content.
      *
      * @param int $count Number of characters to be read (will stop before
      *                   if less characters are in the buffer)
