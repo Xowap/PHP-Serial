@@ -1,7 +1,7 @@
 {
     "name": "blamebutton/php-serial",
     "description": "Multi-platform serial port access convenience class",
-    "license": "GNU GPLv2",
+    "license": "GPL-2.0-only",
     "authors": [
         {
             "name": "Bram Ceulemans",
