@@ -2,7 +2,7 @@
 
 namespace PhpSerial\Interfaces;
 
-class ParityInterface
+interface ParityInterface
 {
     public const ODD  = 'odd';
     public const EVEN = 'even';
