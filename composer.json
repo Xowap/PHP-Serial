@@ -1,5 +1,5 @@
 {
-    "name": "hyperthese/php-serial",
+    "name": "zzepish/php-serial",
     "description": "Multi-platform serial port access convenience class",
     "license": "GNU GPLv2",
     "authors": [
@@ -10,11 +10,8 @@
     ],
     "minimum-stability": "stable",
     "autoload": {
-        "classmap": ["src/"]
-    },
-    "extra": {
-        "branch-alias": {
-            "dev-develop": "1.0.x-dev"
+        "psr-4": {
+            "PhpSerial\\": "src/"
         }
     }
 }
