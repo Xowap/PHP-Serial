@@ -1,8 +1,11 @@
 <?php
-include 'PhpSerial.php';
+require_once __DIR__ . '/../vendor/autoload.php';
+
+use \PhpSerial\PhpSerial;
+use \PhpSerial\Interfaces\BaudInterface;
 
 // Let's start the class
-$serial = new PhpSerial;
+$serial = new PhpSerial();
 
 // First we must specify the device. This works on both linux and windows (if
 // your linux serial device is /dev/ttyS0 for COM1, etc)
@@ -15,10 +18,10 @@ $serial->deviceSet("COM4");
 $serial->deviceOpen('w+');
 
 // We may need to return if nothing happens for 10 seconds
-stream_set_timeout($serial->_dHandle, 10);
+stream_set_timeout($serial->dHandle, 10);
 
 // We can change the baud rate
-$serial->confBaudRate(9600);
+$serial->confBaudRate(BaudInterface::RATE_9600);
 
 // SMS inbox query - mode command and list command
 $serial->sendMessage("AT",1);
