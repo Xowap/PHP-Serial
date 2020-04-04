@@ -43,7 +43,7 @@ class PhpSerial
         $sysName = php_uname();
         if (substr($sysName, 0, 5) === "Linux") {
             $this->os = "linux";
-            if ($this->_exec("stty") === 0) {
+            if ($this->_exec("stty --version") === 0) {
                 register_shutdown_function([$this, "deviceClose"]);
             } else {
                 trigger_error(
