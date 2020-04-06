@@ -8,7 +8,6 @@
             "email": "remy.sanchez@hyperthese.net"
         }
     ],
-    "minimum-stability": "stable",
     "autoload": {
         "psr-4": {
             "PhpSerial\\": "src/"
