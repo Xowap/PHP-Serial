@@ -644,5 +644,10 @@ class PhpSerial
     //
     // INTERNAL TOOLKIT -- {STOP}
     //
+
+    public function __destruct()
+    {
+        $this->deviceClose();
+    }
 }
 
