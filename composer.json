@@ -1,20 +1,16 @@
 {
-    "name": "hyperthese/php-serial",
+    "name": "zzepish/php-serial",
     "description": "Multi-platform serial port access convenience class",
-    "license": "GNU GPLv2",
+    "license": "GPL-3.0-only",
     "authors": [
         {
             "name": "Rémy Sanchez",
             "email": "remy.sanchez@hyperthese.net"
         }
     ],
-    "minimum-stability": "stable",
     "autoload": {
-        "classmap": ["src/"]
-    },
-    "extra": {
-        "branch-alias": {
-            "dev-develop": "1.0.x-dev"
+        "psr-4": {
+            "PhpSerial\\": "src/"
         }
     }
 }
