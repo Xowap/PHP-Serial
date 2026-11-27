@@ -121,9 +121,21 @@ final class UnixPlatform implements PlatformInterface
         return sprintf(
             'stty %s %s %s',
             $deviceFlag,
-            escapeshellarg($device),
+            $this->quoteArgument($device),
             $this->sttyFlags($settings),
         );
+    }
+
+    /**
+     * Quotes an argument for a POSIX shell.
+     *
+     * escapeshellarg() follows the host OS, so it produces double quotes on
+     * Windows. A stty command is always POSIX, so build it the same way
+     * everywhere and keep the output deterministic in tests.
+     */
+    private function quoteArgument(string $value): string
+    {
+        return "'" . str_replace("'", "'\\''", $value) . "'";
     }
 
     private function sttyFlags(SerialSettings $settings): string
