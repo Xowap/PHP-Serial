@@ -9,9 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.0.0] - 2026-11-27
 
-First release of the modernized library. The public API was rebuilt around
-typed settings, explicit exceptions and deterministic reads, while keeping the
-1.x class name available through a compatibility alias.
+First release of the modernized library, published for PHP Serial's 20th
+anniversary. The public API was rebuilt around typed settings, explicit
+exceptions and deterministic reads, while keeping the 1.x class name available
+through a compatibility alias.
 
 ### Added
 

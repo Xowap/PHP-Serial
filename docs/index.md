@@ -8,6 +8,12 @@ supports PHP 8.1 through 8.4 and is released as
 [`hyperthese/php-serial`](https://packagist.org/packages/hyperthese/php-serial)
 under the `Hyperthese\PhpSerial` namespace.
 
+!!! note "20 years of PHP Serial"
+
+    Version 2.0 marks the twentieth anniversary of the project. Thank you to
+    everyone who reported a bug, sent a patch, or connected a device over the
+    last two decades.
+
 ## Features
 
 - **Linux, macOS and Windows.** `stty` is used on POSIX systems and `mode` on

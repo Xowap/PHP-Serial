@@ -2,9 +2,10 @@
 
 ## 2.0.0 — 2026-11-27
 
-The first release of the modernized library. The public API was rebuilt around
-typed settings, explicit exceptions and deterministic reads, while the 1.x
-class name remains available through a compatibility alias.
+The first release of the modernized library, published for PHP Serial's 20th
+anniversary. The public API was rebuilt around typed settings, explicit
+exceptions and deterministic reads, while the 1.x class name remains available
+through a compatibility alias.
 
 ### Added
 

@@ -37,3 +37,13 @@ jobs:
         with:
           generate_release_notes: true
           name: ${{ github.ref_name }}
+          body: |
+            **PHP Serial 2.0 — 20th anniversary release.**
+
+            Two decades after the first version, PHP Serial 2.0 is a modern
+            PSR-4/PSR-12 rewrite that fixes the six root causes reported since
+            2014, adds explicit read timeouts, and ships with Linux, macOS and
+            Windows CI.
+
+            See `CHANGELOG.md` and https://xowap.github.io/PHP-Serial/ for the
+            full migration guide.

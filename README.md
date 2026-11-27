@@ -2,6 +2,8 @@
 
 A small, dependency-light library to talk to serial ports from PHP on Linux, macOS and Windows.
 
+> **2.0 marks the 20th anniversary of PHP Serial** — two decades of connecting PHP applications to serial hardware.
+
 [![CI](https://github.com/Xowap/PHP-Serial/actions/workflows/ci.yml/badge.svg)](https://github.com/Xowap/PHP-Serial/actions/workflows/ci.yml)
 [![Documentation](https://img.shields.io/badge/docs-xowap.github.io%2FPHP--Serial-blue)](https://xowap.github.io/PHP-Serial/)
 [![Packagist](https://img.shields.io/packagist/v/hyperthese/php-serial)](https://packagist.org/packages/hyperthese/php-serial)
