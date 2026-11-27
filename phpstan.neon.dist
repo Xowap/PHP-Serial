@@ -1,0 +1,7 @@
+parameters:
+    level: 8
+    phpVersion: 80100
+    paths:
+        - src
+    tmpDir: .phpstan-cache
+    treatPhpDocTypesAsCertain: true

@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - develop
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: PHP ${{ matrix.php }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        php: ['8.1', '8.2', '8.3', '8.4']
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
+          ini-values: error_reporting=E_ALL
+
+      - name: Install socat (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y socat
+
+      - name: Install socat (macOS)
+        if: runner.os == 'macOS'
+        run: brew install socat
+
+      - uses: ramsey/composer-install@v4
+        with:
+          composer-options: "--prefer-dist --no-progress"
+
+      - name: Validate composer.json
+        run: composer validate --strict --no-check-publish
+
+      - name: Coding standards
+        run: composer cs
+
+      - name: Formatting
+        run: composer cs:check
+
+      - name: Static analysis
+        run: composer analyse
+
+      - name: Tests
+        run: composer test
+
+  docs:
+    name: Documentation build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install Zensical
+        run: pip install zensical
+
+      - name: Build documentation
+        run: zensical build --clean

@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Verify the tag is on master
+        run: git merge-base --is-ancestor "${GITHUB_SHA}" origin/master
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer:v2
+
+      - name: Install socat
+        run: sudo apt-get update && sudo apt-get install -y socat
+
+      - uses: ramsey/composer-install@v4
+
+      - name: Run checks
+        run: composer check
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          generate_release_notes: true
+          name: ${{ github.ref_name }}

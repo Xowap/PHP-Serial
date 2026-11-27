@@ -1,704 +1,468 @@
 <?php
-define ("SERIAL_DEVICE_NOTSET", 0);
-define ("SERIAL_DEVICE_SET", 1);
-define ("SERIAL_DEVICE_OPENED", 2);
+
+declare(strict_types=1);
+
+namespace Hyperthese\PhpSerial;
+
+use Hyperthese\PhpSerial\Exception\ConfigurationException;
+use Hyperthese\PhpSerial\Exception\ConnectionException;
+use Hyperthese\PhpSerial\Io\Port;
+use Hyperthese\PhpSerial\Platform\PlatformFactory;
+use Hyperthese\PhpSerial\Platform\PlatformInterface;
+use Psr\Log\LoggerInterface;
+use Throwable;
 
 /**
- * Serial port control class
+ * Multi-platform serial port access.
  *
- * THIS PROGRAM COMES WITH ABSOLUTELY NO WARRANTIES !
- * USE IT AT YOUR OWN RISKS !
+ * ```php
+ * $serial = new PhpSerial();
+ * $serial->deviceSet('/dev/ttyUSB0')
+ *        ->confBaudRate(115200)
+ *        ->confParity('none')
+ *        ->confCharacterLength(8)
+ *        ->confStopBits(1)
+ *        ->confFlowControl('none')
+ *        ->deviceOpen();
  *
- * @author Rémy Sanchez <remy.sanchez@hyperthese.net>
- * @author Rizwan Kassim <rizwank@geekymedia.com>
- * @thanks Aurélien Derouineau for finding how to open serial ports with windows
- * @thanks Alec Avedisyan for help and testing with reading
- * @thanks Jim Wright for OSX cleanup/fixes.
- * @copyright under GPL 2 licence
+ * $serial->sendMessage("AT\r\n");
+ * $reply = $serial->readPort(timeout: 1.0);
+ * $serial->deviceClose();
+ * ```
  */
-class PhpSerial
+final class PhpSerial
 {
-    public $_device = null;
-    public $_winDevice = null;
-    public $_dHandle = null;
-    public $_dState = SERIAL_DEVICE_NOTSET;
-    public $_buffer = "";
-    public $_os = "";
+    public const VERSION = '2.0.0';
 
-    /**
-     * This var says if buffer should be flushed by sendMessage (true) or
-     * manually (false)
-     *
-     * @var bool
-     */
-    public $autoFlush = true;
+    private DeviceState $state = DeviceState::NotSet;
+    private ?string $deviceName = null;
+    private ?string $device = null;
+    private ?Port $port = null;
+    private SerialSettings $settings;
+    private readonly PlatformInterface $platform;
+    private readonly ?LoggerInterface $logger;
+    private bool $autoFlush = true;
+    private string $buffer = '';
 
-    /**
-     * Constructor. Perform some checks about the OS and setserial
-     *
-     * @return PhpSerial
-     */
-    public function PhpSerial()
+    public function __construct(?LoggerInterface $logger = null, ?PlatformInterface $platform = null)
     {
-        setlocale(LC_ALL, "en_US");
-
-        $sysName = php_uname();
-
-        if (substr($sysName, 0, 5) === "Linux") {
-            $this->_os = "linux";
-
-            if ($this->_exec("stty") === 0) {
-                register_shutdown_function(array($this, "deviceClose"));
-            } else {
-                trigger_error(
-                    "No stty availible, unable to run.",
-                    E_USER_ERROR
-                );
-            }
-        } elseif (substr($sysName, 0, 6) === "Darwin") {
-            $this->_os = "osx";
-            register_shutdown_function(array($this, "deviceClose"));
-        } elseif (substr($sysName, 0, 7) === "Windows") {
-            $this->_os = "windows";
-            register_shutdown_function(array($this, "deviceClose"));
-        } else {
-            trigger_error("Host OS is neither osx, linux nor windows, unable " .
-                          "to run.", E_USER_ERROR);
-            exit();
-        }
+        $this->settings = new SerialSettings();
+        $this->platform = $platform ?? PlatformFactory::create();
+        $this->logger = $logger;
     }
 
-    //
-    // OPEN/CLOSE DEVICE SECTION -- {START}
-    //
-
-    /**
-     * Device set function : used to set the device name/address.
-     * -> linux : use the device address, like /dev/ttyS0
-     * -> osx : use the device address, like /dev/tty.serial
-     * -> windows : use the COMxx device name, like COM1 (can also be used
-     *     with linux)
-     *
-     * @param  string $device the name of the device to be used
-     * @return bool
-     */
-    public function deviceSet($device)
+    public function __destruct()
     {
-        if ($this->_dState !== SERIAL_DEVICE_OPENED) {
-            if ($this->_os === "linux") {
-                if (preg_match("@^COM(\\d+):?$@i", $device, $matches)) {
-                    $device = "/dev/ttyS" . ($matches[1] - 1);
-                }
-
-                if ($this->_exec("stty -F " . $device) === 0) {
-                    $this->_device = $device;
-                    $this->_dState = SERIAL_DEVICE_SET;
-
-                    return true;
-                }
-            } elseif ($this->_os === "osx") {
-                if ($this->_exec("stty -f " . $device) === 0) {
-                    $this->_device = $device;
-                    $this->_dState = SERIAL_DEVICE_SET;
-
-                    return true;
-                }
-            } elseif ($this->_os === "windows") {
-                if (preg_match("@^COM(\\d+):?$@i", $device, $matches)
-                        and $this->_exec(
-                            exec("mode " . $device . " xon=on BAUD=9600")
-                        ) === 0
-                ) {
-                    $this->_winDevice = "COM" . $matches[1];
-                    $this->_device = "\\.com" . $matches[1];
-                    $this->_dState = SERIAL_DEVICE_SET;
-
-                    return true;
-                }
-            }
-
-            trigger_error("Specified serial port is not valid", E_USER_WARNING);
-
-            return false;
-        } else {
-            trigger_error("You must close your device before to set an other " .
-                          "one", E_USER_WARNING);
-
-            return false;
+        try {
+            $this->deviceClose();
+        } catch (Throwable) {
+            // Destructors must never throw.
         }
     }
 
     /**
-     * Opens the device for reading and/or writing.
+     * Sets the device to use.
      *
-     * @param  string $mode Opening mode : same parameter as fopen()
-     * @return bool
+     * Accepted formats: "/dev/ttyUSB0", "ttyACM0", "cu.usbserial-1420",
+     * "COM3" (mapped to /dev/ttyS2 on POSIX) or an integer port number.
      */
-    public function deviceOpen($mode = "r+b")
+    public function deviceSet(string|int $device): self
     {
-        if ($this->_dState === SERIAL_DEVICE_OPENED) {
-            trigger_error("The device is already opened", E_USER_NOTICE);
+        $this->assertNotOpen('set another device');
 
-            return true;
+        $resolved = $this->platform->resolveDevice($device);
+
+        if (!$this->platform->deviceExists($resolved)) {
+            throw new ConnectionException(sprintf(
+                'The serial device "%s" resolved to "%s", but it does not exist. '
+                . 'On Linux, make sure the user running PHP belongs to the "dialout" group.',
+                (string) $device,
+                $resolved,
+            ));
         }
 
-        if ($this->_dState === SERIAL_DEVICE_NOTSET) {
-            trigger_error(
-                "The device must be set before to be open",
-                E_USER_WARNING
-            );
+        $this->deviceName = (string) $device;
+        $this->device = $resolved;
+        $this->state = DeviceState::Set;
 
-            return false;
-        }
+        $this->logger?->debug('Serial device set to {device} ({path}).', [
+            'device' => $this->deviceName,
+            'path' => $this->device,
+        ]);
 
-        if (!preg_match("@^[raw]\\+?b?$@", $mode)) {
-            trigger_error(
-                "Invalid opening mode : ".$mode.". Use fopen() modes.",
-                E_USER_WARNING
-            );
-
-            return false;
-        }
-
-        $this->_dHandle = @fopen($this->_device, $mode);
-
-        if ($this->_dHandle !== false) {
-            stream_set_blocking($this->_dHandle, 0);
-            $this->_dState = SERIAL_DEVICE_OPENED;
-
-            return true;
-        }
-
-        $this->_dHandle = null;
-        trigger_error("Unable to open the device", E_USER_WARNING);
-
-        return false;
+        return $this;
     }
 
     /**
-     * Closes the device
+     * Opens the device and applies the current configuration.
      *
-     * @return bool
+     * The open call is non-blocking by default on POSIX (`r+bn`), which avoids
+     * the hang described in issue #34.
      */
-    public function deviceClose()
+    public function deviceOpen(?string $mode = null, ?bool $nonBlocking = null): self
     {
-        if ($this->_dState !== SERIAL_DEVICE_OPENED) {
-            return true;
+        if ($this->state === DeviceState::Opened) {
+            throw new ConfigurationException('The serial device is already open.');
         }
 
-        if (fclose($this->_dHandle)) {
-            $this->_dHandle = null;
-            $this->_dState = SERIAL_DEVICE_SET;
-
-            return true;
+        if ($this->device === null) {
+            throw new ConfigurationException('The serial device must be set before it can be opened.');
         }
 
-        trigger_error("Unable to close the device", E_USER_ERROR);
+        $nonBlocking ??= true;
+        $this->platform->configure($this->device, $this->settings);
 
-        return false;
-    }
-
-    //
-    // OPEN/CLOSE DEVICE SECTION -- {STOP}
-    //
-
-    //
-    // CONFIGURE SECTION -- {START}
-    //
-
-    /**
-     * Configure the Baud Rate
-     * Possible rates : 110, 150, 300, 600, 1200, 2400, 4800, 9600, 38400,
-     * 57600 and 115200.
-     *
-     * @param  int  $rate the rate to set the port in
-     * @return bool
-     */
-    public function confBaudRate($rate)
-    {
-        if ($this->_dState !== SERIAL_DEVICE_SET) {
-            trigger_error("Unable to set the baud rate : the device is " .
-                          "either not set or opened", E_USER_WARNING);
-
-            return false;
-        }
-
-        $validBauds = array (
-            110    => 11,
-            150    => 15,
-            300    => 30,
-            600    => 60,
-            1200   => 12,
-            2400   => 24,
-            4800   => 48,
-            9600   => 96,
-            19200  => 19,
-            38400  => 38400,
-            57600  => 57600,
-            115200 => 115200
+        $openMode = $this->normalizeOpenMode(
+            $mode ?? $this->platform->defaultOpenMode(),
+            $nonBlocking && $this->platform->supportsNonBlockingOpen(),
         );
 
-        if (isset($validBauds[$rate])) {
-            if ($this->_os === "linux") {
-                $ret = $this->_exec(
-                    "stty -F " . $this->_device . " " . (int) $rate,
-                    $out
-                );
-            } elseif ($this->_os === "osx") {
-                $ret = $this->_exec(
-                    "stty -f " . $this->_device . " " . (int) $rate,
-                    $out
-                );
-            } elseif ($this->_os === "windows") {
-                $ret = $this->_exec(
-                    "mode " . $this->_winDevice . " BAUD=" . $validBauds[$rate],
-                    $out
-                );
-            } else {
-                return false;
+        error_clear_last();
+        $stream = @fopen($this->device, $openMode);
+
+        if ($stream === false) {
+            $error = error_get_last();
+
+            throw new ConnectionException(sprintf(
+                'Unable to open the serial device "%s" in mode "%s"%s',
+                $this->device,
+                $openMode,
+                $error === null ? '.' : ': ' . $error['message'],
+            ));
+        }
+
+        $this->port = new Port($stream);
+        $this->state = DeviceState::Opened;
+
+        $this->logger?->info('Opened serial device {path} in mode {mode}.', [
+            'path' => $this->device,
+            'mode' => $openMode,
+        ]);
+
+        return $this;
+    }
+
+    /**
+     * Closes the device. Calling it on a closed device is a no-op.
+     */
+    public function deviceClose(): void
+    {
+        if ($this->state !== DeviceState::Opened) {
+            return;
+        }
+
+        if ($this->buffer !== '') {
+            try {
+                $this->port?->write($this->buffer);
+            } catch (Throwable $exception) {
+                $this->logger?->error('Unable to flush buffered data while closing {path}.', [
+                    'path' => $this->device,
+                    'exception' => $exception,
+                ]);
             }
 
-            if ($ret !== 0) {
-                trigger_error(
-                    "Unable to set baud rate: " . $out[1],
-                    E_USER_WARNING
-                );
-
-                return false;
-            }
-
-            return true;
-        } else {
-            return false;
+            $this->buffer = '';
         }
+
+        $this->port?->close();
+        $this->port = null;
+        $this->state = $this->device === null ? DeviceState::NotSet : DeviceState::Set;
+
+        $this->logger?->info('Closed serial device {path}.', ['path' => $this->device]);
     }
 
     /**
-     * Configure parity.
-     * Modes : odd, even, none
+     * Reads up to $count bytes, optionally waiting for data.
      *
-     * @param  string $parity one of the modes
-     * @return bool
+     * @param int             $count   Maximum number of bytes; 0 means "everything available".
+     * @param int|float|null  $timeout Seconds to wait for data. Null returns immediately.
      */
-    public function confParity($parity)
+    public function readPort(int $count = 0, int|float|null $timeout = null): string
     {
-        if ($this->_dState !== SERIAL_DEVICE_SET) {
-            trigger_error(
-                "Unable to set parity : the device is either not set or opened",
-                E_USER_WARNING
-            );
+        $data = $this->requirePort()->read($count, $timeout === null ? null : (float) $timeout);
 
-            return false;
-        }
+        $this->logger?->debug('Read {bytes} byte(s) from {path}.', [
+            'bytes' => strlen($data),
+            'path' => $this->device,
+        ]);
 
-        $args = array(
-            "none" => "-parenb",
-            "odd"  => "parenb parodd",
-            "even" => "parenb -parodd",
-        );
-
-        if (!isset($args[$parity])) {
-            trigger_error("Parity mode not supported", E_USER_WARNING);
-
-            return false;
-        }
-
-        if ($this->_os === "linux") {
-            $ret = $this->_exec(
-                "stty -F " . $this->_device . " " . $args[$parity],
-                $out
-            );
-        } elseif ($this->_os === "osx") {
-            $ret = $this->_exec(
-                "stty -f " . $this->_device . " " . $args[$parity],
-                $out
-            );
-        } else {
-            $ret = $this->_exec(
-                "mode " . $this->_winDevice . " PARITY=" . $parity{0},
-                $out
-            );
-        }
-
-        if ($ret === 0) {
-            return true;
-        }
-
-        trigger_error("Unable to set parity : " . $out[1], E_USER_WARNING);
-
-        return false;
+        return $data;
     }
 
     /**
-     * Sets the length of a character.
+     * Reads one line. The delimiter is included when it fits within the limit.
      *
-     * @param  int  $int length of a character (5 <= length <= 8)
-     * @return bool
+     * @param int             $maxLength Maximum number of bytes; 0 means unlimited.
+     * @param int|float|null  $timeout   Seconds to wait for data.
      */
-    public function confCharacterLength($int)
+    public function readLine(int $maxLength = 0, string $delimiter = "\n", int|float|null $timeout = null): string
     {
-        if ($this->_dState !== SERIAL_DEVICE_SET) {
-            trigger_error("Unable to set length of a character : the device " .
-                          "is either not set or opened", E_USER_WARNING);
-
-            return false;
-        }
-
-        $int = (int) $int;
-        if ($int < 5) {
-            $int = 5;
-        } elseif ($int > 8) {
-            $int = 8;
-        }
-
-        if ($this->_os === "linux") {
-            $ret = $this->_exec(
-                "stty -F " . $this->_device . " cs" . $int,
-                $out
-            );
-        } elseif ($this->_os === "osx") {
-            $ret = $this->_exec(
-                "stty -f " . $this->_device . " cs" . $int,
-                $out
-            );
-        } else {
-            $ret = $this->_exec(
-                "mode " . $this->_winDevice . " DATA=" . $int,
-                $out
-            );
-        }
-
-        if ($ret === 0) {
-            return true;
-        }
-
-        trigger_error(
-            "Unable to set character length : " .$out[1],
-            E_USER_WARNING
+        return $this->requirePort()->readLine(
+            $maxLength,
+            $delimiter,
+            $timeout === null ? null : (float) $timeout,
         );
-
-        return false;
     }
 
     /**
-     * Sets the length of stop bits.
-     *
-     * @param  float $length the length of a stop bit. It must be either 1,
-     *                       1.5 or 2. 1.5 is not supported under linux and on
-     *                       some computers.
-     * @return bool
+     * Appends a message to the write buffer and flushes it when auto-flush is on.
      */
-    public function confStopBits($length)
+    public function sendMessage(string $message, int|float $waitForReply = 0.0): self
     {
-        if ($this->_dState !== SERIAL_DEVICE_SET) {
-            trigger_error("Unable to set the length of a stop bit : the " .
-                          "device is either not set or opened", E_USER_WARNING);
+        $this->buffer .= $message;
 
-            return false;
-        }
-
-        if ($length != 1
-                and $length != 2
-                and $length != 1.5
-                and !($length == 1.5 and $this->_os === "linux")
-        ) {
-            trigger_error(
-                "Specified stop bit length is invalid",
-                E_USER_WARNING
-            );
-
-            return false;
-        }
-
-        if ($this->_os === "linux") {
-            $ret = $this->_exec(
-                "stty -F " . $this->_device . " " .
-                    (($length == 1) ? "-" : "") . "cstopb",
-                $out
-            );
-        } elseif ($this->_os === "osx") {
-            $ret = $this->_exec(
-                "stty -f " . $this->_device . " " .
-                    (($length == 1) ? "-" : "") . "cstopb",
-                $out
-            );
-        } else {
-            $ret = $this->_exec(
-                "mode " . $this->_winDevice . " STOP=" . $length,
-                $out
-            );
-        }
-
-        if ($ret === 0) {
-            return true;
-        }
-
-        trigger_error(
-            "Unable to set stop bit length : " . $out[1],
-            E_USER_WARNING
-        );
-
-        return false;
-    }
-
-    /**
-     * Configures the flow control
-     *
-     * @param  string $mode Set the flow control mode. Availible modes :
-     *                      -> "none" : no flow control
-     *                      -> "rts/cts" : use RTS/CTS handshaking
-     *                      -> "xon/xoff" : use XON/XOFF protocol
-     * @return bool
-     */
-    public function confFlowControl($mode)
-    {
-        if ($this->_dState !== SERIAL_DEVICE_SET) {
-            trigger_error("Unable to set flow control mode : the device is " .
-                          "either not set or opened", E_USER_WARNING);
-
-            return false;
-        }
-
-        $linuxModes = array(
-            "none"     => "clocal -crtscts -ixon -ixoff",
-            "rts/cts"  => "-clocal crtscts -ixon -ixoff",
-            "xon/xoff" => "-clocal -crtscts ixon ixoff"
-        );
-        $windowsModes = array(
-            "none"     => "xon=off octs=off rts=on",
-            "rts/cts"  => "xon=off octs=on rts=hs",
-            "xon/xoff" => "xon=on octs=off rts=on",
-        );
-
-        if ($mode !== "none" and $mode !== "rts/cts" and $mode !== "xon/xoff") {
-            trigger_error("Invalid flow control mode specified", E_USER_ERROR);
-
-            return false;
-        }
-
-        if ($this->_os === "linux") {
-            $ret = $this->_exec(
-                "stty -F " . $this->_device . " " . $linuxModes[$mode],
-                $out
-            );
-        } elseif ($this->_os === "osx") {
-            $ret = $this->_exec(
-                "stty -f " . $this->_device . " " . $linuxModes[$mode],
-                $out
-            );
-        } else {
-            $ret = $this->_exec(
-                "mode " . $this->_winDevice . " " . $windowsModes[$mode],
-                $out
-            );
-        }
-
-        if ($ret === 0) {
-            return true;
-        } else {
-            trigger_error(
-                "Unable to set flow control : " . $out[1],
-                E_USER_ERROR
-            );
-
-            return false;
-        }
-    }
-
-    /**
-     * Sets a setserial parameter (cf man setserial)
-     * NO MORE USEFUL !
-     * 	-> No longer supported
-     * 	-> Only use it if you need it
-     *
-     * @param  string $param parameter name
-     * @param  string $arg   parameter value
-     * @return bool
-     */
-    public function setSetserialFlag($param, $arg = "")
-    {
-        if (!$this->_ckOpened()) {
-            return false;
-        }
-
-        $return = exec(
-            "setserial " . $this->_device . " " . $param . " " . $arg . " 2>&1"
-        );
-
-        if ($return{0} === "I") {
-            trigger_error("setserial: Invalid flag", E_USER_WARNING);
-
-            return false;
-        } elseif ($return{0} === "/") {
-            trigger_error("setserial: Error with device file", E_USER_WARNING);
-
-            return false;
-        } else {
-            return true;
-        }
-    }
-
-    //
-    // CONFIGURE SECTION -- {STOP}
-    //
-
-    //
-    // I/O SECTION -- {START}
-    //
-
-    /**
-     * Sends a string to the device
-     *
-     * @param string $str          string to be sent to the device
-     * @param float  $waitForReply time to wait for the reply (in seconds)
-     */
-    public function sendMessage($str, $waitForReply = 0.1)
-    {
-        $this->_buffer .= $str;
-
-        if ($this->autoFlush === true) {
+        if ($this->autoFlush) {
             $this->serialflush();
         }
 
-        usleep((int) ($waitForReply * 1000000));
+        if ($waitForReply > 0) {
+            usleep((int) round((float) $waitForReply * 1_000_000));
+        }
+
+        return $this;
     }
 
     /**
-     * Reads the port until no new datas are availible, then return the content.
-     *
-     * @param int $count Number of characters to be read (will stop before
-     *                   if less characters are in the buffer)
-     * @return string
+     * Writes a payload immediately, bypassing the buffer.
      */
-    public function readPort($count = 0)
+    public function write(string $data): int
     {
-        if ($this->_dState !== SERIAL_DEVICE_OPENED) {
-            trigger_error("Device must be opened to read it", E_USER_WARNING);
+        $written = $this->requirePort()->write($data);
 
-            return false;
-        }
+        $this->logger?->debug('Wrote {bytes} byte(s) to {path}.', [
+            'bytes' => $written,
+            'path' => $this->device,
+        ]);
 
-        if ($this->_os === "linux" || $this->_os === "osx") {
-            // Behavior in OSX isn't to wait for new data to recover, but just
-            // grabs what's there!
-            // Doesn't always work perfectly for me in OSX
-            $content = ""; $i = 0;
-
-            if ($count !== 0) {
-                do {
-                    if ($i > $count) {
-                        $content .= fread($this->_dHandle, ($count - $i));
-                    } else {
-                        $content .= fread($this->_dHandle, 128);
-                    }
-                } while (($i += 128) === strlen($content));
-            } else {
-                do {
-                    $content .= fread($this->_dHandle, 128);
-                } while (($i += 128) === strlen($content));
-            }
-
-            return $content;
-        } elseif ($this->_os === "windows") {
-            // Windows port reading procedures still buggy
-            $content = ""; $i = 0;
-
-            if ($count !== 0) {
-                do {
-                    if ($i > $count) {
-                        $content .= fread($this->_dHandle, ($count - $i));
-                    } else {
-                        $content .= fread($this->_dHandle, 128);
-                    }
-                } while (($i += 128) === strlen($content));
-            } else {
-                do {
-                    $content .= fread($this->_dHandle, 128);
-                } while (($i += 128) === strlen($content));
-            }
-
-            return $content;
-        }
-
-        return false;
+        return $written;
     }
 
     /**
-     * Flushes the output buffer
-     * Renamed from flush for osx compat. issues
-     *
-     * @return bool
+     * Alias kept for 1.x compatibility.
      */
-    public function serialflush()
+    public function serialflush(): self
     {
-        if (!$this->_ckOpened()) {
-            return false;
+        return $this->flush();
+    }
+
+    /**
+     * Sends the buffered data and flushes the stream.
+     */
+    public function flush(): self
+    {
+        $port = $this->requirePort();
+
+        if ($this->buffer !== '') {
+            $port->write($this->buffer);
+            $this->buffer = '';
         }
 
-        if (fwrite($this->_dHandle, $this->_buffer) !== false) {
-            $this->_buffer = "";
+        $port->flush();
 
-            return true;
-        } else {
-            $this->_buffer = "";
-            trigger_error("Error while sending message", E_USER_WARNING);
+        return $this;
+    }
 
-            return false;
+    public function setAutoFlush(bool $autoFlush): self
+    {
+        $this->autoFlush = $autoFlush;
+
+        return $this;
+    }
+
+    public function confBaudRate(int $rate): self
+    {
+        $this->assertNotOpen('change the baud rate');
+        $this->settings = $this->settings->withBaudRate($rate);
+
+        return $this;
+    }
+
+    public function confParity(Parity|string $parity): self
+    {
+        $this->assertNotOpen('change the parity');
+        $this->settings = $this->settings->withParity($this->normalizeParity($parity));
+
+        return $this;
+    }
+
+    public function confCharacterLength(int $bits): self
+    {
+        $this->assertNotOpen('change the character length');
+        $this->settings = $this->settings->withDataBits($bits);
+
+        return $this;
+    }
+
+    public function confStopBits(StopBits|int|float $length): self
+    {
+        $this->assertNotOpen('change the stop bits');
+        $this->settings = $this->settings->withStopBits($this->normalizeStopBits($length));
+
+        return $this;
+    }
+
+    public function confFlowControl(FlowControl|string $mode): self
+    {
+        $this->assertNotOpen('change the flow control');
+        $this->settings = $this->settings->withFlowControl($this->normalizeFlowControl($mode));
+
+        return $this;
+    }
+
+    /**
+     * Selects binary (raw) or text (canonical) line discipline.
+     */
+    public function confTransferMode(TransferMode|string $mode): self
+    {
+        $this->assertNotOpen('change the transfer mode');
+        $this->settings = $this->settings->withTransferMode($this->normalizeTransferMode($mode));
+
+        return $this;
+    }
+
+    public function confDtr(bool $enabled): self
+    {
+        $this->assertNotOpen('change the DTR behaviour');
+        $this->settings = $this->settings->withDtr($enabled);
+
+        return $this;
+    }
+
+    public function getSettings(): SerialSettings
+    {
+        return $this->settings;
+    }
+
+    /**
+     * Resolved device path, for example "/dev/ttyUSB0" or "\\.\COM3".
+     */
+    public function getDevice(): ?string
+    {
+        return $this->device;
+    }
+
+    /**
+     * Device name as provided by the caller, for example "COM3".
+     */
+    public function getDeviceName(): ?string
+    {
+        return $this->deviceName;
+    }
+
+    public function getPlatform(): PlatformInterface
+    {
+        return $this->platform;
+    }
+
+    public function getPlatformName(): string
+    {
+        return $this->platform->name();
+    }
+
+    public function isConfigured(): bool
+    {
+        return $this->device !== null;
+    }
+
+    public function isOpen(): bool
+    {
+        return $this->port?->isOpen() ?? false;
+    }
+
+    /**
+     * Underlying stream, for advanced stream options (stream_set_timeout, ...).
+     *
+     * @return resource|null
+     */
+    public function getStream()
+    {
+        return $this->port?->resource();
+    }
+
+    private function requirePort(): Port
+    {
+        if ($this->port === null) {
+            throw new ConfigurationException('The serial device must be opened before it can be used.');
+        }
+
+        return $this->port;
+    }
+
+    private function assertNotOpen(string $action): void
+    {
+        if ($this->state === DeviceState::Opened) {
+            throw new ConfigurationException(sprintf('Close the serial device before you %s.', $action));
         }
     }
 
-    //
-    // I/O SECTION -- {STOP}
-    //
-
-    //
-    // INTERNAL TOOLKIT -- {START}
-    //
-
-    public function _ckOpened()
+    private function normalizeOpenMode(string $mode, bool $nonBlocking): string
     {
-        if ($this->_dState !== SERIAL_DEVICE_OPENED) {
-            trigger_error("Device must be opened", E_USER_WARNING);
-
-            return false;
+        if (preg_match('/^([rwa])([+bn]*)$/', $mode, $matches) !== 1) {
+            throw new ConfigurationException(sprintf(
+                'Invalid opening mode "%s". Use fopen() modes such as "r+b" or "r+bn".',
+                $mode,
+            ));
         }
 
-        return true;
-    }
+        $flags = $matches[2];
 
-    public function _ckClosed()
-    {
-        if ($this->_dState === SERIAL_DEVICE_OPENED) {
-            trigger_error("Device must be closed", E_USER_WARNING);
-
-            return false;
+        if (substr_count($flags, '+') > 1 || substr_count($flags, 'b') > 1 || substr_count($flags, 'n') > 1) {
+            throw new ConfigurationException(sprintf('Invalid opening mode "%s".', $mode));
         }
 
-        return true;
+        return $matches[1]
+            . (str_contains($flags, '+') ? '+' : '')
+            . 'b'
+            . ($nonBlocking ? 'n' : '');
     }
 
-    public function _exec($cmd, &$out = null)
+    private function normalizeParity(Parity|string $parity): Parity
     {
-        $desc = array(
-            1 => array("pipe", "w"),
-            2 => array("pipe", "w")
-        );
+        if ($parity instanceof Parity) {
+            return $parity;
+        }
 
-        $proc = proc_open($cmd, $desc, $pipes);
-
-        $ret = stream_get_contents($pipes[1]);
-        $err = stream_get_contents($pipes[2]);
-
-        fclose($pipes[1]);
-        fclose($pipes[2]);
-
-        $retVal = proc_close($proc);
-
-        if (func_num_args() == 2) $out = array($ret, $err);
-        return $retVal;
+        return Parity::tryFrom(strtolower(trim($parity))) ?? throw new ConfigurationException(sprintf(
+            'Unsupported parity mode "%s". Use none, odd, even, mark or space.',
+            $parity,
+        ));
     }
 
-    //
-    // INTERNAL TOOLKIT -- {STOP}
-    //
+    private function normalizeStopBits(StopBits|int|float $length): StopBits
+    {
+        if ($length instanceof StopBits) {
+            return $length;
+        }
+
+        $value = rtrim(rtrim(sprintf('%.1F', (float) $length), '0'), '.');
+
+        return StopBits::tryFrom($value) ?? throw new ConfigurationException(sprintf(
+            'Unsupported stop bit length "%s". Use 1, 1.5 or 2.',
+            (string) $length,
+        ));
+    }
+
+    private function normalizeFlowControl(FlowControl|string $mode): FlowControl
+    {
+        if ($mode instanceof FlowControl) {
+            return $mode;
+        }
+
+        return FlowControl::tryFrom(strtolower(trim($mode))) ?? throw new ConfigurationException(sprintf(
+            'Unsupported flow control mode "%s". Use none, rts/cts or xon/xoff.',
+            $mode,
+        ));
+    }
+
+    private function normalizeTransferMode(TransferMode|string $mode): TransferMode
+    {
+        if ($mode instanceof TransferMode) {
+            return $mode;
+        }
+
+        return TransferMode::tryFrom(strtolower(trim($mode))) ?? throw new ConfigurationException(sprintf(
+            'Unsupported transfer mode "%s". Use text or binary.',
+            $mode,
+        ));
+    }
 }

@@ -1,20 +1,73 @@
 {
     "name": "hyperthese/php-serial",
-    "description": "Multi-platform serial port access convenience class",
-    "license": "GNU GPLv2",
+    "description": "Multi-platform convenience class to access the serial port from PHP",
+    "type": "library",
+    "license": "Apache-2.0",
+    "keywords": [
+        "serial",
+        "serial port",
+        "rs232",
+        "com port",
+        "arduino",
+        "tty"
+    ],
+    "homepage": "https://github.com/Xowap/PHP-Serial",
+    "support": {
+        "issues": "https://github.com/Xowap/PHP-Serial/issues",
+        "source": "https://github.com/Xowap/PHP-Serial"
+    },
     "authors": [
         {
             "name": "Rémy Sanchez",
             "email": "remy.sanchez@hyperthese.net"
         }
     ],
-    "minimum-stability": "stable",
+    "require": {
+        "php": "^8.1",
+        "psr/log": "^1.1 || ^2.0 || ^3.0"
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.64",
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^10.5",
+        "squizlabs/php_codesniffer": "^3.10"
+    },
     "autoload": {
-        "classmap": ["src/"]
+        "psr-4": {
+            "Hyperthese\\PhpSerial\\": "src/"
+        },
+        "files": [
+            "src/deprecated.php"
+        ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Hyperthese\\PhpSerial\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {}
+    },
+    "scripts": {
+        "test": "phpunit",
+        "test:coverage": "phpunit --coverage-text",
+        "analyse": "phpstan analyse --no-progress",
+        "cs": "phpcs",
+        "cs:check": "php-cs-fixer fix --dry-run --diff --using-cache=no",
+        "cs:fix": "php-cs-fixer fix",
+        "check": [
+            "@cs",
+            "@cs:check",
+            "@analyse",
+            "@test"
+        ]
     },
     "extra": {
         "branch-alias": {
-            "dev-develop": "1.0.x-dev"
+            "dev-develop": "2.0.x-dev",
+            "dev-main": "2.0.x-dev",
+            "dev-master": "2.0.x-dev"
         }
     }
 }
