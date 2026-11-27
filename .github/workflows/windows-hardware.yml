@@ -1,0 +1,47 @@
+name: Windows hardware serial
+
+# Real COM port test. Hosted runners cannot install a kernel-mode virtual
+# serial driver, so this workflow targets a self-hosted Windows runner with
+# two COM ports wired as a null modem (or a com0com pair).
+#
+# Configure the repository variables PHPSERIAL_TEST_COM_A and
+# PHPSERIAL_TEST_COM_B with the two port names (for example COM5 and COM6),
+# and register a runner with the labels: self-hosted, windows, x64, serial.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  serial:
+    name: Real COM port pair
+    runs-on: [self-hosted, windows, x64, serial]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer:v2
+
+      - uses: ramsey/composer-install@v4
+
+      - name: Verify the port variables are configured
+        shell: pwsh
+        run: |
+          if (-not "${{ vars.PHPSERIAL_TEST_COM_A }}") {
+            throw "Set the repository variable PHPSERIAL_TEST_COM_A."
+          }
+          if (-not "${{ vars.PHPSERIAL_TEST_COM_B }}") {
+            throw "Set the repository variable PHPSERIAL_TEST_COM_B."
+          }
+
+      - name: Run the real serial test
+        shell: pwsh
+        env:
+          PHPSERIAL_TEST_COM_A: ${{ vars.PHPSERIAL_TEST_COM_A }}
+          PHPSERIAL_TEST_COM_B: ${{ vars.PHPSERIAL_TEST_COM_B }}
+        run: php vendor/phpunit/phpunit/phpunit --testsuite integration --filter WindowsSerialTest

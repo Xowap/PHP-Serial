@@ -1,0 +1,69 @@
+[project]
+site_name = "PHP Serial"
+site_url = "https://xowap.github.io/PHP-Serial/"
+site_description = "Multi-platform serial port access for PHP, from PHP 8.1 to 8.4."
+site_author = "Rémy Sanchez and contributors"
+copyright = "Apache-2.0 · Rémy Sanchez and contributors"
+repo_url = "https://github.com/Xowap/PHP-Serial"
+edit_uri = "edit/develop/docs/"
+docs_dir = "docs"
+site_dir = "site"
+
+nav = [
+    {Home = "index.md"},
+    {Installation = "installation.md"},
+    {Usage = "usage.md"},
+    {Configuration = "configuration.md"},
+    {Platforms = "platforms.md"},
+    {Troubleshooting = "troubleshooting.md"},
+    {"Migration from 1.x" = "migration.md"},
+    {Reference = [
+        {API = "api.md"},
+        {Changelog = "changelog.md"},
+    ]},
+    {Contributing = "contributing.md"},
+]
+
+[project.theme]
+name = "material"
+logo = "assets/logo.svg"
+favicon = "assets/logo.svg"
+features = [
+    "navigation.instant",
+    "navigation.instant.progress",
+    "navigation.sections",
+    "navigation.footer",
+    "navigation.tracking",
+    "toc.follow",
+    "content.code.copy",
+    "search.highlight",
+    "search.suggest",
+]
+
+[project.theme.icon]
+repo = "fontawesome/brands/github"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle = {icon = "lucide/sun-moon", name = "Switch to dark mode"}
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle = {icon = "lucide/moon", name = "Switch to light mode"}
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+toggle = {icon = "lucide/sun", name = "Switch to system preference"}
+
+[project.plugins.search]
+
+[project.markdown_extensions]
+admonition = {}
+attr_list = {}
+tables = {}
+toc = {permalink = true}
+"pymdownx.details" = {}
+"pymdownx.superfences" = {}
+"pymdownx.tabbed" = {alternate_style = true}

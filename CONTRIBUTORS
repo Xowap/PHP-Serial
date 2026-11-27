@@ -1,2 +1,36 @@
-Rémy Sanchez <remy.sanchez@hyperthese.net>
-Rizwan Kassim <rizwank@geekymedia.com>
+PHP Serial contributors
+=======================
+
+Author
+------
+Rémy Sanchez <remy.sanchez@hyperthese.net> — original author and 2.0 maintainer
+
+Original contributors
+---------------------
+Rizwan Kassim <rizwank@geekymedia.com> — early Windows support and maintenance
+
+Code, patches and review
+------------------------
+mattficken (GitHub) — Windows read/write and COM10+ (#3, #6)
+Jeroi (GitHub) — POSIX device names (#5)
+vagovszky (GitHub) — stty detection under Apache (#8)
+highTowerSU (GitHub) — stty detection (#16)
+KamranSyed (GitHub) — constructor and stty detection (#25, #26)
+czb182 (GitHub) — sticky Windows mode options (#10)
+jakon89 (GitHub) — constructor (#12)
+lsolesen (GitHub) — test and CI groundwork (#19)
+bit-world (GitHub) — Windows device path (#21)
+ruscoe (GitHub) — documentation typos (#24)
+Zzepish (GitHub) — typed PSR-4 modernization (#32)
+Oscurlo (GitHub) — strict types and exceptions (#38)
+
+Bug reports and testing
+-----------------------
+fgland — issue reports
+nc8q — issue reports
+toggio — issue reports
+pBra1n — issue reports
+tvleavitt — issue reports
+stollr — issue reports
+jaysongyn — issue reports
+and everyone else who tested PHP Serial on real hardware
